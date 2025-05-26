@@ -2,6 +2,7 @@ package integration
 
 import (
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"testing"
@@ -47,5 +48,15 @@ func TestBalancer(t *testing.T) {
 }
 
 func BenchmarkBalancer(b *testing.B) {
-	// TODO: Реалізуйте інтеграційний бенчмарк для балансувальникка.
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			resp, err := client.Get(fmt.Sprintf("%s/api/v1/some-data", baseAddress))
+			if err != nil {
+				b.Errorf("Request failed: %v", err)
+				continue
+			}
+			io.Copy(io.Discard, resp.Body)
+			resp.Body.Close()
+		}
+	})
 }
