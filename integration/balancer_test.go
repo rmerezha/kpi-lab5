@@ -19,12 +19,31 @@ func TestBalancer(t *testing.T) {
 		t.Skip("Integration test is not enabled")
 	}
 
-	// TODO: Реалізуйте інтеграційний тест для балансувальникка.
-	resp, err := client.Get(fmt.Sprintf("%s/api/v1/some-data", baseAddress))
-	if err != nil {
-		t.Error(err)
+	const totalRequests = 6
+	const minSeen = 2
+
+	seen := make(map[string]int)
+
+	for i := 0; i < totalRequests; i++ {
+		resp, err := client.Get(fmt.Sprintf("%s/api/v1/some-data", baseAddress))
+		if err != nil {
+			t.Fatalf("Request %d failed: %v", i+1, err)
+		}
+		from := resp.Header.Get("lb-from")
+		if from == "" {
+			t.Errorf("Request %d: missing 'lb-from' header", i+1)
+		}
+		seen[from]++
+		err = resp.Body.Close()
+		if err != nil {
+			t.Fatalf("Request %d: failed to close response body: %v", i+1, err)
+		}
+		t.Logf("Request %d → Response from [%s]", i+1, from)
 	}
-	t.Logf("response from [%s]", resp.Header.Get("lb-from"))
+
+	if len(seen) < minSeen {
+		t.Errorf("Expected responses from multiple backends, got: %v", seen)
+	}
 }
 
 func BenchmarkBalancer(b *testing.B) {
