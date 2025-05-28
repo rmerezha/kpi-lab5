@@ -147,11 +147,11 @@ func (db *Db) Put(key, value string) error {
 	}
 	db.activeSegment.index[key] = db.activeSegment.offset
 	db.activeSegment.offset += int64(n)
-	info, err := db.activeSegment.file.Stat()
+	size, err := db.Size()
 	if err != nil {
 		return err
 	}
-	if info.Size() >= db.segmentSize {
+	if size >= db.segmentSize {
 		newSegment, err := db.createSegment()
 		if err != nil {
 			return err
