@@ -6,7 +6,7 @@ import (
 
 func TestDb(t *testing.T) {
 	tmp := t.TempDir()
-	db, err := Open(tmp, 0.5*Mi)
+	db, err := Open(tmp, 1*Mi)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -61,7 +61,7 @@ func TestDb(t *testing.T) {
 		if err := db.Close(); err != nil {
 			t.Fatal(err)
 		}
-		db, err = Open(tmp, 0.5*Mi)
+		db, err = Open(tmp, 1*Mi)
 		if err != nil {
 			t.Fatal(err)
 		}

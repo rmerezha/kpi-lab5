@@ -11,7 +11,7 @@ import (
 
 const (
 	outFileName = "segment"
-	Mi          = 1024 * 1024
+	Mi          = int64(1024 * 1024)
 )
 
 var ErrNotFound = fmt.Errorf("record does not exist")
