@@ -176,7 +176,8 @@ func (db *Db) MergeSegments() error {
 		return err
 	}
 	mergedIndex := make(hashIndex)
-	for _, segment := range db.segments {
+	for i := len(db.segments) - 1; i >= 0; i-- {
+		segment := db.segments[i]
 		for key, offset := range segment.index {
 			if _, exists := mergedIndex[key]; exists {
 				continue
