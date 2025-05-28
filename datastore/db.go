@@ -22,6 +22,13 @@ type Db struct {
 	index hashIndex
 }
 
+type Segment struct {
+	file     *os.File
+	filePath string
+	offset   int64
+	index    hashIndex
+}
+
 func Open(dir string) (*Db, error) {
 	outputPath := filepath.Join(dir, outFileName)
 	f, err := os.OpenFile(outputPath, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0o600)
@@ -37,6 +44,10 @@ func Open(dir string) (*Db, error) {
 		return nil, err
 	}
 	return db, nil
+}
+
+func (db *Db) createSegment() (*Segment, error) {
+	return nil, nil // TODO
 }
 
 func (db *Db) recover() error {
@@ -113,4 +124,8 @@ func (db *Db) Size() (int64, error) {
 		return 0, err
 	}
 	return info.Size(), nil
+}
+
+func (db *Db) MergeSegments() error {
+	return nil // TODO
 }
