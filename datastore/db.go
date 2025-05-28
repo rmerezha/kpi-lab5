@@ -56,7 +56,17 @@ func Open(dir string, segmentSize int64) (*Db, error) {
 }
 
 func (db *Db) createSegment() (*Segment, error) {
-	return nil, nil // TODO
+	name := fmt.Sprintf("%s-%d", outFileName, len(db.segments))
+	path := filepath.Join(db.dir, name)
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_RDWR, 0o600)
+	if err != nil {
+		return nil, err
+	}
+	return &Segment{
+		file:     f,
+		filePath: path,
+		index:    make(hashIndex),
+	}, nil
 }
 
 func (db *Db) recover() error {
@@ -161,5 +171,43 @@ func (db *Db) Size() (int64, error) {
 }
 
 func (db *Db) MergeSegments() error {
-	return nil // TODO
+	mergedSegment, err := db.createSegment()
+	if err != nil {
+		return err
+	}
+	mergedIndex := make(hashIndex)
+	for _, segment := range db.segments {
+		for key, offset := range segment.index {
+			if _, exists := mergedIndex[key]; exists {
+				continue
+			}
+			f, err := os.Open(segment.filePath)
+			if err != nil {
+				return err
+			}
+			defer f.Close()
+			_, err = f.Seek(offset, io.SeekStart)
+			if err != nil {
+				return err
+			}
+			var record entry
+			if _, err := record.DecodeFromReader(bufio.NewReader(f)); err != nil {
+				return err
+			}
+			n, err := mergedSegment.file.Write(record.Encode())
+			if err != nil {
+				return err
+			}
+			mergedIndex[key] = mergedSegment.offset
+			mergedSegment.offset += int64(n)
+		}
+	}
+	for _, s := range db.segments {
+		s.file.Close()
+		os.Remove(s.filePath)
+	}
+	db.segments = []*Segment{mergedSegment}
+	db.activeSegment = mergedSegment
+	db.activeSegment.index = mergedIndex
+	return nil
 }
