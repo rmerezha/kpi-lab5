@@ -115,6 +115,21 @@ func TestDb(t *testing.T) {
 			t.Fatalf("expected type error when reading string as int64")
 		}
 	})
+
+	t.Run("string wrong type", func(t *testing.T) {
+		intKey := "int_key_2"
+		var intVal int64 = 10
+
+		err := db.PutInt64(intKey, intVal)
+		if err != nil {
+			t.Fatalf("PutInt64 failed: %v", err)
+		}
+
+		_, err = db.Get(intKey)
+		if err == nil {
+			t.Fatalf("expected type error when reading int64 as string")
+		}
+	})
 }
 
 func TestMergeSegments(t *testing.T) {
