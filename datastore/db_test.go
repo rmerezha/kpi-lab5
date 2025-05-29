@@ -88,7 +88,7 @@ func TestDb(t *testing.T) {
 func TestMergeSegments(t *testing.T) {
 	tmp := t.TempDir()
 
-	db, err := Open(tmp, 100)
+	db, err := Open(tmp, 50)
 	if err != nil {
 		t.Fatalf("failed to open db: %v", err)
 	}
