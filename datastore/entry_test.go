@@ -7,7 +7,7 @@ import (
 )
 
 func TestEntry_Encode(t *testing.T) {
-	e := entry{"key", "value"}
+	e := entry{"key", "value", StrValType}
 	e.Decode(e.Encode())
 	if e.key != "key" {
 		t.Error("incorrect key")
@@ -21,7 +21,7 @@ func TestReadValue(t *testing.T) {
 	var (
 		a, b entry
 	)
-	a = entry{"key", "test-value"}
+	a = entry{"key", "10", Int64ValType}
 	originalBytes := a.Encode()
 
 	b.Decode(originalBytes)
