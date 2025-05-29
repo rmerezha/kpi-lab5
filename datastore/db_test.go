@@ -83,6 +83,53 @@ func TestDb(t *testing.T) {
 			}
 		}
 	})
+
+	t.Run("put/get int64", func(t *testing.T) {
+		key := "int_key"
+		var value int64 = 10
+
+		err := db.PutInt64(key, value)
+		if err != nil {
+			t.Fatalf("PutInt64 failed: %v", err)
+		}
+
+		got, err := db.GetInt64(key)
+		if err != nil {
+			t.Fatalf("GetInt64 failed: %v", err)
+		}
+
+		if got != value {
+			t.Errorf("GetInt64(%q) = %d, want %d", key, got, value)
+		}
+	})
+
+	t.Run("int64 wrong type", func(t *testing.T) {
+		strKey := "string_key"
+		err := db.Put(strKey, "not int")
+		if err != nil {
+			t.Fatalf("Put failed: %v", err)
+		}
+
+		_, err = db.GetInt64(strKey)
+		if err == nil {
+			t.Fatalf("expected type error when reading string as int64")
+		}
+	})
+
+	t.Run("string wrong type", func(t *testing.T) {
+		intKey := "int_key_2"
+		var intVal int64 = 10
+
+		err := db.PutInt64(intKey, intVal)
+		if err != nil {
+			t.Fatalf("PutInt64 failed: %v", err)
+		}
+
+		_, err = db.Get(intKey)
+		if err == nil {
+			t.Fatalf("expected type error when reading int64 as string")
+		}
+	})
 }
 
 func TestMergeSegments(t *testing.T) {
