@@ -2,6 +2,7 @@ package datastore
 
 import (
 	"bufio"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"io"
@@ -21,9 +22,10 @@ var ErrNotFound = fmt.Errorf("record does not exist")
 type hashIndex map[string]int64
 
 type putRequest struct {
-	key      string
-	value    string
-	respChan chan error
+	key       string
+	value     string
+	valueType byte
+	respChan  chan error
 }
 
 type mergeRequest struct {
@@ -127,7 +129,7 @@ func (db *Db) ioWorker() {
 	for {
 		select {
 		case req := <-db.putRequests:
-			e := entry{key: req.key, value: req.value}
+			e := entry{key: req.key, value: req.value, valueType: req.valueType}
 			encoded := e.Encode()
 			n, err := db.activeSegment.file.Write(encoded)
 			if err != nil {
@@ -177,7 +179,7 @@ func (db *Db) ioWorker() {
 				}
 				db.activeSegment.file = nil
 			}
-			
+
 			err := db.performMerge()
 			req.respChan <- err
 			if db.activeSegment != nil {
@@ -193,7 +195,6 @@ func (db *Db) ioWorker() {
 					}
 				}
 			}
-
 
 		case <-db.shutdown:
 			return
@@ -253,47 +254,23 @@ func (db *Db) Close() error {
 }
 
 func (db *Db) Get(key string) (string, error) {
-	db.segmentsMutex.RLock()
-	segmentsSnapshot := make([]*Segment, len(db.segments))
-	copy(segmentsSnapshot, db.segments)
-	db.segmentsMutex.RUnlock()
-
-
-	for i := len(segmentsSnapshot) - 1; i >= 0; i-- {
-		segment := segmentsSnapshot[i]
-
-		segment.idxMu.RLock()
-		offset, ok := segment.index[key]
-		segment.idxMu.RUnlock()
-
-		if ok {
-			f, err := os.Open(segment.filePath)
-			if err != nil {
-				return "", fmt.Errorf("get: could not open segment file %s: %w", segment.filePath, err)
-			}
-			defer f.Close()
-
-			_, err = f.Seek(offset, io.SeekStart)
-			if err != nil {
-				return "", fmt.Errorf("get: could not seek in segment file %s: %w", segment.filePath, err)
-			}
-
-			var record entry
-			if _, err := record.DecodeFromReader(bufio.NewReader(f)); err != nil {
-				return "", fmt.Errorf("get: could not decode record from segment file %s: %w", segment.filePath, err)
-			}
-			return record.value, nil
-		}
+	val, typ, err := db.getRaw(key)
+	if err != nil {
+		return "", err
 	}
-	return "", ErrNotFound
+	if typ != StrValType {
+		return "", fmt.Errorf("expected string, got type 0x%x", typ)
+	}
+	return val, nil
 }
 
 func (db *Db) Put(key, value string) error {
 	respChan := make(chan error)
 	db.putRequests <- putRequest{
-		key:      key,
-		value:    value,
-		respChan: respChan,
+		key:       key,
+		value:     value,
+		valueType: StrValType,
+		respChan:  respChan,
 	}
 	return <-respChan
 }
@@ -338,7 +315,6 @@ func (db *Db) performMerge() error {
 	}
 	mergedSegmentID := maxID + 1
 
-
 	mergedSegment, err := newSegment(db.dir, mergedSegmentID)
 	if err != nil {
 		return fmt.Errorf("performMerge: failed to create new segment object: %w", err)
@@ -367,7 +343,7 @@ func (db *Db) performMerge() error {
 		}
 		segment.idxMu.RUnlock()
 	}
-	
+
 	var currentMergedOffset int64 = 0
 	for key, data := range latestKeyOffsets {
 		f, err := os.Open(data.segmentPath)
@@ -379,7 +355,7 @@ func (db *Db) performMerge() error {
 			f.Close()
 			return fmt.Errorf("performMerge: could not seek in source segment %s for key %s: %w", data.segmentPath, key, err)
 		}
-		
+
 		var record entry
 		if _, err := record.DecodeFromReader(bufio.NewReader(f)); err != nil {
 			f.Close()
@@ -392,7 +368,7 @@ func (db *Db) performMerge() error {
 		if err != nil {
 			return fmt.Errorf("performMerge: could not write entry for key %s to merged segment: %w", key, err)
 		}
-		
+
 		mergedSegment.idxMu.Lock()
 		mergedSegment.index[key] = currentMergedOffset
 		mergedSegment.idxMu.Unlock()
@@ -406,7 +382,7 @@ func (db *Db) performMerge() error {
 	}
 
 	db.segments = []*Segment{mergedSegment}
-	db.activeSegment = mergedSegment 
+	db.activeSegment = mergedSegment
 
 	for _, p := range oldSegmentPaths {
 		if p == mergedSegment.filePath {
@@ -417,4 +393,68 @@ func (db *Db) performMerge() error {
 		}
 	}
 	return nil
+}
+
+func (db *Db) PutInt64(key string, value int64) error {
+	buf := make([]byte, 8)
+	binary.LittleEndian.PutUint64(buf, uint64(value))
+	respChan := make(chan error)
+
+	db.putRequests <- putRequest{
+		key:       key,
+		value:     string(buf),
+		valueType: Int64ValType,
+		respChan:  respChan,
+	}
+	return <-respChan
+}
+
+func (db *Db) GetInt64(key string) (int64, error) {
+	val, typ, err := db.getRaw(key)
+	if err != nil {
+		return 0, err
+	}
+	if typ != Int64ValType {
+		return 0, fmt.Errorf("expected int64, got type 0x%x", typ)
+	}
+	if len(val) != 8 {
+		return 0, fmt.Errorf("corrupt int64 encoding")
+	}
+	return int64(binary.LittleEndian.Uint64([]byte(val))), nil
+}
+
+func (db *Db) getRaw(key string) (string, byte, error) {
+	db.segmentsMutex.RLock()
+	segmentsSnapshot := make([]*Segment, len(db.segments))
+	copy(segmentsSnapshot, db.segments)
+	db.segmentsMutex.RUnlock()
+
+	for i := len(segmentsSnapshot) - 1; i >= 0; i-- {
+		segment := segmentsSnapshot[i]
+
+		segment.idxMu.RLock()
+		offset, ok := segment.index[key]
+		segment.idxMu.RUnlock()
+		if !ok {
+			continue
+		}
+
+		f, err := os.Open(segment.filePath)
+		if err != nil {
+			return "", 0, fmt.Errorf("could not open segment file %s: %w", segment.filePath, err)
+		}
+		defer f.Close()
+
+		_, err = f.Seek(offset, io.SeekStart)
+		if err != nil {
+			return "", 0, fmt.Errorf("could not seek in segment file %s: %w", segment.filePath, err)
+		}
+
+		var rec entry
+		if _, err := rec.DecodeFromReader(bufio.NewReader(f)); err != nil {
+			return "", 0, fmt.Errorf("could not decode record from segment file %s: %w", segment.filePath, err)
+		}
+		return rec.value, rec.valueType, nil
+	}
+	return "", 0, ErrNotFound
 }
