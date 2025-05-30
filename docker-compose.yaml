@@ -64,7 +64,7 @@ services:
     ports:
       - "8432:8080"
     volumes:
-      - db-data
+      - db-data:/var/lib/db/data
 
 volumes:
   db-data:
