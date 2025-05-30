@@ -21,6 +21,7 @@ services:
       timeout: 2s
       retries: 5
       start_interval: 5s
+      start_period: 5s
     depends_on:
       - db
     ports:
@@ -36,6 +37,7 @@ services:
       timeout: 2s
       retries: 5
       start_interval: 5s
+      start_period: 5s
     depends_on:
       - db
     ports:
@@ -51,6 +53,7 @@ services:
       timeout: 2s
       retries: 5
       start_interval: 5s
+      start_period: 5s
     depends_on:
       - db
     ports:
