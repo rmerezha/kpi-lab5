@@ -1,6 +1,7 @@
 package integration
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -22,11 +23,11 @@ func TestBalancer(t *testing.T) {
 
 	const totalRequests = 6
 	const minSeen = 2
-
+	var today = time.Now().Format(time.DateOnly)
 	seen := make(map[string]int)
 
 	for i := 0; i < totalRequests; i++ {
-		resp, err := client.Get(fmt.Sprintf("%s/api/v1/some-data", baseAddress))
+		resp, err := client.Get(fmt.Sprintf("%s/api/v1/some-data?key=%s", baseAddress, "kpi3-test"))
 		if err != nil {
 			t.Fatalf("Request %d failed: %v", i+1, err)
 		}
@@ -34,6 +35,20 @@ func TestBalancer(t *testing.T) {
 		if from == "" {
 			t.Errorf("Request %d: missing 'lb-from' header", i+1)
 		}
+
+		type RespJson struct {
+			Value string `json:"value"`
+		}
+
+		respJson := RespJson{}
+		err = json.NewDecoder(resp.Body).Decode(&respJson)
+		if err != nil {
+			t.Errorf("Request %d: failed to decode response body: %v", i+1, err)
+		}
+		if respJson.Value != today {
+			t.Errorf("Request %d: expected %s, got %s", i+1, today, respJson.Value)
+		}
+
 		seen[from]++
 		err = resp.Body.Close()
 		if err != nil {

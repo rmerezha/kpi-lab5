@@ -6,10 +6,16 @@ services:
     networks:
       - servers
     depends_on:
-      - server1
-      - server2
-      - server3
-      - balancer
+      server1:
+        condition: service_healthy
+      server2:
+        condition: service_healthy
+      server3:
+        condition: service_healthy
+      balancer:
+        condition: service_started
+      db:
+        condition: service_started
 
   balancer:
     # Для тестів включаємо режим відлагодження, коли балансувальник додає інформацію, кому було відправлено запит.
